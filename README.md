@@ -23,7 +23,9 @@ You might need to create the folder `~/.local/lib/` if setup.py complains about 
 It's also recommended to do the installation within a conda environment e.g.:
    1. `conda create -n gsm_env`
    2. `source activate gsm_env`
-   3. `python setup.py install --prefix ~/.local`
+   3. `pip install git+https://github.com/bkr91/pyGSM.git` (Alternative 1, recommended)
+   3. `python setup.py install --prefix ~/.local` (Alternative 2)
+
 
 
 ## Requirements 
