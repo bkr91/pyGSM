@@ -201,7 +201,8 @@ class MainGSM(GSM):
 
             # Check if allup or alldown
             energies = np.array(self.energies)
-            if (np.all(energies[1:]+0.5 >= energies[:-1]) or np.all(energies[1:]-0.5 <= energies[:-1])) and (self.climber or self.finder):
+            # if (np.all(energies[1:]+0.5 >= energies[:-1]) or np.all(energies[1:]-0.5 <= energies[:-1])) and (self.climber or self.finder):
+            if (np.all(energies[1:]+0.2 >= energies[:-1]) or np.all(energies[1:]-0.2 <= energies[:-1])) and (self.climber or self.finder):
                 printcool(" There is no TS, turning off TS search")
                 rtype = 0
                 self.climber = self.finder = self.find = self.climb = False
@@ -834,7 +835,7 @@ class MainGSM(GSM):
             exsteps = 2
             print(" multiplying steps for node %i by %i" % (n, exsteps))
         elif self.find and n == tsnode and self.energies[tsnode] > self.energies[tsnode-1]*1.1 and self.energies[tsnode] > self.energies[tsnode+1]*1.1:  # Can also try self.climb but i hate climbing image
-            exsteps = 2
+            exsteps = 4
             print(" multiplying steps for node %i by %i" % (n, exsteps))
         # elif not self.find and not self.climb and n==tsnode  and self.energies[tsnode]>self.energies[tsnode-1]*1.5 and self.energies[tsnode]>self.energies[tsnode+1]*1.5 and self.climber:
         #    exsteps=2
@@ -1269,7 +1270,7 @@ class MainGSM(GSM):
                 self.optimizer[n].conv_Ediff = self.options['CONV_Ediff']*factor
                 if self.optimizer[n].converged and n != TSnode:
                     self.optimizer[n].check_only_grad_converged=True
-                if (self.climb or self.find) and self.energies[n]>self.energies[TSnode]*0.75 and n!=TSnode:
+                if (self.climb or self.find) and self.energies[n]>self.energies[TSnode]*0.75 and n!=TSnode: # disable check_only_grad_convergence for nodes relatively high in energy
                     self.optimizer[n].conv_grms = self.CONV_TOL     
                     self.optimizer[n].conv_gmax = self.options['CONV_gmax']
                     self.optimizer[n].conv_Ediff = self.options['CONV_Ediff']

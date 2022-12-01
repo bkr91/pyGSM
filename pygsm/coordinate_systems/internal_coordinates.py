@@ -312,8 +312,24 @@ class InternalCoordinates(object):
         return FiniteDifference
 
     def calcGrad(self, xyz, gradx, frozen_atoms=None):
+        # print("in calcGrad...")
+        # print("xyz:")
+        # print(xyz)
+        # print("")
+        # print("gradx:")
+        # print(gradx)
+        # print("")
+        
         Ginv = self.GInverse(xyz)
         Bmat = self.wilsonB(xyz)
+
+        # print("Ginv:")
+        # print(Ginv)
+        # print("")
+        # print("Bmat:")
+        # print(Bmat)
+        # print("")
+
 
         # Internal coordinate gradient
         return block_matrix.dot(Ginv, block_matrix.dot(Bmat, gradx))

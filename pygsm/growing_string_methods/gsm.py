@@ -683,9 +683,21 @@ class GSM(object):
         nnodes = len(nodes)
         dqmaga = [0.]*nnodes
         ictan = [[]]*nnodes
+        # print("printing nodes")
+        # for i in range(n0, nnodes):
+        #     print(i,": ",nodes[i])
+        # print("Finished printing nodes")
+        
 
         for n in range(n0+1, nnodes):
             # print "getting tangent between %i %i" % (n,n-1)
+            if nodes[n] is None:
+                print("nodes[n] is None")
+                print("n=",n)
+            if nodes[n-1] is None:
+                print("nodes[n-1] is None")
+                print("n=",n)
+
             assert nodes[n] is not None, "n is bad"
             assert nodes[n-1] is not None, "n-1 is bad"
             ictan[n] = GSM.get_tangent_xyz(nodes[n-1].xyz, nodes[n].xyz, nodes[0].primitive_internal_coordinates)
@@ -805,9 +817,9 @@ class GSM(object):
     @staticmethod
     def ic_reparam(nodes, energies, climbing=False, ic_reparam_steps=8, print_level=1, NUM_CORE=1, MAXRE=0.25):
         '''
-        Reparameterizes the string using Delocalizedin internal coordinatesusing three-way tangents at the TS node
+        Reparameterizes the string using Delocalized internal coordinates using three-way tangents at the TS node
         Only pushes nodes outwards during reparameterization because otherwise too many things change.
-            Be careful, however, if the path is allup or alldown then this can cause
+        Be careful, however, if the path is allup or alldown then this can cause
         Parameters
         ----------
         nodes : list of molecule objects

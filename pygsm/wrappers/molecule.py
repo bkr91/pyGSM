@@ -405,6 +405,10 @@ class Molecule(object):
 
     @property
     def gradient(self):
+        # print("in Molecule.gradient()")
+        # print("self.xyz")
+        # print(self.xyz)
+        # print("")
         gradx = self.PES.get_gradient(self.xyz, frozen_atoms=self.frozen_atoms)
         return self.coord_obj.calcGrad(self.xyz, gradx)  # CartesianCoordinate just returns gradx
 

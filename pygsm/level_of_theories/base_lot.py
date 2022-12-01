@@ -188,6 +188,14 @@ class Lot(object):
             doc='xTB solvent'
         )
 
+        opt.add_option(
+            key='DFTB_lattice_file',
+            value=None,
+            required=False,
+            allowed_types=[str],
+            doc='Name of file containing lattice vectors in DFTB+ format'
+        )
+
         Lot._default_options = opt
         return Lot._default_options.copy()
 
@@ -201,7 +209,9 @@ class Lot(object):
         self.Gradient = Gradient
         self.Coupling = Coupling
         self._Energies={}
+        self.Energies={}
         self._Gradients={}
+        self.Gradients={}
         self._Couplings={}
 
         # count number of states
@@ -404,6 +414,7 @@ class Lot(object):
             self.runall(geom,runtype)
             self.hasRanForCurrentCoords=True
         
+        # print(self.Energies)
         Energy = self.Energies[(multiplicity,state)]
         if Energy.unit=="Hartree":
             return Energy.value*units.KCAL_MOL_PER_AU
@@ -413,6 +424,7 @@ class Lot(object):
             return Energy.value
 
     def get_gradient(self, coords, multiplicity, state, frozen_atoms=None):
+        # print("in lot.get_gradient")
         if self.hasRanForCurrentCoords is False or (coords != self.currentCoords).any():
             self.currentCoords = coords.copy()
             geom = manage_xyz.np_to_xyz(self.geom, self.currentCoords)
@@ -461,17 +473,23 @@ class Lot(object):
         raise NotImplementedError
 
     def runall(self, geom, runtype=None):
+        # print("in lot.runall()")
         self.Gradients = {}
         self.Energies = {}
         self.Couplings = {}
         for state in self.states:
             mult, ad_idx = state
             if state in self.gradient_states or runtype == "gradient":
+                # print("before self.run()")
+                # print(self.Gradients)
                 self.run(geom, mult, ad_idx)
+                # print("after self.run()")
+                # print(self.Gradients)
             elif state in self.coupling_states:
                 self.run(geom, mult, ad_idx, 'coupling')
             else:
                 self.run(geom, mult, ad_idx, 'energy')
+            # print(self.Energies)
 
     #    self.E=[]
     #    self.grada = []

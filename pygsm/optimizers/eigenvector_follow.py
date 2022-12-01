@@ -92,6 +92,9 @@ class eigenvector_follow(base_optimizer):
         # ====>  Do opt steps <======= #
         for ostep in range(opt_steps):
             print(" On opt step {} for node {}".format(ostep+1, molecule.node_id))
+            print(" opt_type = ", opt_type)
+            print(" self.opt_cross = ", self.opt_cross)
+
 
             # update Hess
             if update_hess:
@@ -147,7 +150,7 @@ class eigenvector_follow(base_optimizer):
             g = ls['g']
 
             if ls['status'] == -2:
-                print('[ERROR] the point return to the privious point')
+                print('[ERROR] the point return to the previous point')
                 x = xp.copy()
                 molecule.xyz = xyzp
                 g = gp.copy()
@@ -219,6 +222,7 @@ class eigenvector_follow(base_optimizer):
 
             if self.options['print_level'] > 0:
                 print(" Node: %d Opt step: %d E: %5.4f predE: %5.4f ratio: %1.3f gradrms: %1.5f ss: %1.3f DMAX: %1.3f" % (molecule.node_id, ostep+1, fx-refE, dEpre, ratio, molecule.gradrms, step, self.DMAX))
+                #             Node  Opt step     E     predE   ratio      gradrms        ss    DMAX
             self.buf.write(u' Node: %d Opt step: %d E: %5.4f predE: %5.4f ratio: %1.3f gradrms: %1.5f ss: %1.3f DMAX: %1.3f\n' % (molecule.node_id, ostep+1, fx-refE, dEpre, ratio, molecule.gradrms, step, self.DMAX))
 
             # check for convergence TODO
@@ -234,6 +238,8 @@ class eigenvector_follow(base_optimizer):
                 xnorm = 1.0
 
             print(" gmax %5.4f disp %5.4f Ediff %5.4f gradrms %5.4f\n" % (gmax, disp, dEstep, molecule.gradrms))
+            
+            gtse_conv_factor = 10.
 
             # TODO turn back on conv_DE
             if self.opt_cross and abs(dE) < self.conv_dE and molecule.gradrms < self.conv_grms and abs(gmax) < self.conv_gmax and abs(dEstep) < self.conv_Ediff and abs(disp) < self.conv_disp:
@@ -250,10 +256,20 @@ class eigenvector_follow(base_optimizer):
                     if abs(gts) < self.conv_grms*5.:
                         self.converged = True
                 elif opt_type == "TS":
-                    if self.gtse < self.conv_grms*5.:
+                    if self.gtse < self.conv_grms*gtse_conv_factor:
                         self.converged = True
                 else:
                     self.converged = True
+
+            
+            print("------------------------------------------------")
+            print("%-14s %-5.4e  [ %-5.4e ] %-2s" % ("gradrms:", molecule.gradrms, self.conv_grms, "✔" if molecule.gradrms < self.conv_grms  else "✖"))
+            print("%-14s %-5.4e  [ %-5.4e ] %-2s" % ("abs(gmax):", abs(gmax), self.conv_gmax, "✔" if abs(gmax) < self.conv_gmax else "✖"))
+            print("%-14s %-5.4e  [ %-5.4e ] %-2s" % ("abs(dEstep):", abs(dEstep), self.conv_Ediff,  "✔" if abs(dEstep) < self.conv_Ediff else "✖"))
+            print("%-14s %-5.4e  [ %-5.4e ] %-2s" % ("abs(disp):", abs(disp), self.conv_disp,  "✔" if abs(disp) < self.conv_disp else "✖"))
+            print("%-14s %-5.4e  [ %-5.4e ] %-2s" % ("abs(dE):", abs(dE), self.conv_dE,  "✔" if abs(dE) < self.conv_dE else "✖")) if  self.opt_cross else None
+            print("%-14s %-5.4e  [ %-5.4e ] %-2s" % ("self.gtse:", self.gtse, self.conv_grms*gtse_conv_factor,  "✔" if self.gtse < self.conv_grms*gtse_conv_factor else "✖")) if  opt_type == "TS" else None
+            print("------------------------------------------------")
 
             if self.converged:
                 print(" converged")
@@ -276,7 +292,7 @@ class eigenvector_follow(base_optimizer):
                         gc -= np.dot(gc.T, c[:, np.newaxis])*c[:, np.newaxis]
             print()
             sys.stdout.flush()
-
+        print("Optimization NOT CONVERGED after {} steps".format(opt_steps)) if not self.converged else None
         print(" opt-summary {}".format(molecule.node_id))
         print(self.buf.getvalue())
         return geoms, energies

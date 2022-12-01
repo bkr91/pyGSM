@@ -28,7 +28,8 @@ class xTB_lot(Lot):
             elem = E.from_symbol(a)
             numbers.append(elem.atomic_num)
         self.numbers = np.asarray(numbers)
-
+        
+        
     def run(self, geom, multiplicity, state, verbose=False):
 
         # print('running!')
@@ -57,6 +58,10 @@ class xTB_lot(Lot):
 
         # write E to scratch
         self.write_E_to_file()
+
+        # print(self._Gradients)
+        # print("DEBUG: Exiting...")
+        # sys.exit(1)
 
         return res
 

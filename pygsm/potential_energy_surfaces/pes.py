@@ -293,7 +293,15 @@ class PES(object):
 
     def get_gradient(self, xyz, frozen_atoms=None):
 
+        # print("In pes.get_gradient()")
+        # print("self.multiplicity: ", self.multiplicity)
+        # print("self.ad_idx: ", self.ad_idx)
+        # print("self.lot: ", self.lot)
         grad = self.lot.get_gradient(xyz, self.multiplicity, self.ad_idx, frozen_atoms=frozen_atoms)
+        # print("grad:")
+        # print(grad)
+        # print("")
+        
         if self.FORCE is not None:
             for i in self.FORCE:
                 atoms = [i[0], i[1]]
@@ -314,7 +322,6 @@ class PES(object):
                 a = i[0]
                 force = i[1]
                 grad[a] += force*(xyz[a] - self.reference_xyz[a])
-
         grad = np.reshape(grad, (-1, 1))
         return grad  # Ha/ang
 

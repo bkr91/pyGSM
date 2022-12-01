@@ -3,6 +3,7 @@ import argparse
 import importlib
 import json
 import os
+import sys
 import textwrap
 
 # third party
@@ -16,6 +17,7 @@ from pygsm.coordinate_systems import Angle, DelocalizedInternalCoordinates, Dihe
 from pygsm.growing_string_methods import DE_GSM, SE_Cross, SE_GSM
 from pygsm.level_of_theories.ase import ASELoT
 from pygsm.level_of_theories.xtb_lot import xTB_lot
+from pygsm.level_of_theories.dftb import DFTB
 from pygsm.optimizers import beales_cg, conjugate_gradient, eigenvector_follow, lbfgs
 from pygsm.potential_energy_surfaces import Avg_PES, PES, Penalty_PES
 from pygsm.utilities import elements, manage_xyz, nifty
@@ -35,15 +37,17 @@ def parse_arguments(verbose=True):
                 gsm -mode DE_GSM -xyzfile yourfile.xyz -package QChem -lot_inp_file qstart -ID 1
                 ''')
     )
-    parser.add_argument('-xyzfile', help='XYZ file containing reactant and, if DE-GSM, product.', required=True)
-    parser.add_argument('-isomers', help='driving coordinate file', type=str, required=False)
+    parser.add_argument(
+        '-xyzfile', help='XYZ file containing reactant and, if DE-GSM, product.', required=True)
+    parser.add_argument(
+        '-isomers', help='driving coordinate file', type=str, required=False)
     parser.add_argument('-mode', default="DE_GSM", help='GSM Type (default: %(default)s)',
                         choices=["DE_GSM", "SE_GSM", "SE_Cross"], type=str, required=True)
     parser.add_argument('-only_drive', action='store_true', help='')
     parser.add_argument('-package', default="QChem", type=str,
                         help="Electronic structure theory package (default: %(default)s)",
                         choices=["QChem", "Orca", "Molpro", "PyTC", "TeraChemCloud", "OpenMM", "DFTB", "TeraChem",
-                                 "BAGEL", "xTB_lot", "ase"])
+                                 "BAGEL", "xTB_lot", "ase", "QMCFC"])
     parser.add_argument('-lot_inp_file', type=str, default=None,
                         help='external file to specify calculation e.g. qstart,gstart,etc. Highly package specific.',
                         required=False)
@@ -55,21 +59,29 @@ def parse_arguments(verbose=True):
                         choices=['PES', 'Avg_PES', 'Penalty_PES'])
     parser.add_argument('-adiabatic_index', nargs="*", type=int, default=[0],
                         help='Adiabatic index (default: %(default)s)', required=False)
-    parser.add_argument('-multiplicity', nargs="*", type=int, default=[1], help='Multiplicity (default: %(default)s)')
+    parser.add_argument('-multiplicity', nargs="*", type=int,
+                        default=[1], help='Multiplicity (default: %(default)s)')
     parser.add_argument('-FORCE_FILE', type=str, default=None,
                         help='Constant force between atoms in AU,e.g. [(1,2,0.1214)]. Negative is tensile, positive is compresive')
-    parser.add_argument('-RESTRAINT_FILE', type=str, default=None, help='Harmonic translational restraints')
+    parser.add_argument('-RESTRAINT_FILE', type=str,
+                        default=None, help='Harmonic translational restraints')
     parser.add_argument('-optimizer', type=str, default='eigenvector_follow',
                         help='The optimizer object. (default: %(default)s Recommend LBFGS for large molecules >1000 atoms)',
                         required=False)
     parser.add_argument('-opt_print_level', type=int, default=1,
                         help='Printout for optimization. 2 prints everything in opt.', required=False)
-    parser.add_argument('-gsm_print_level', type=int, default=1, help='Printout for gsm. 1 prints ?', required=False)
-    parser.add_argument('-xTB_Hamiltonian', type=str, default='GFN2-xTB', help='xTB hamiltonian', choices=["GFN2-xTB", "GFN1-xTB"], required=False)
-    parser.add_argument('-xTB_accuracy', type=float, default=1.0, help='xTB accuracy', required=False)
-    parser.add_argument('-xTB_electronic_temperature', type=float, default=300.0, help='xTB electronic temperature', required=False)
-    parser.add_argument('-xyz_output_format', type=str, default="molden", help='Format of the produced XYZ files', required=False)
-    parser.add_argument('-solvent', type=str, help='Solvent to use (xTB calculations only)', required=False)
+    parser.add_argument('-gsm_print_level', type=int, default=1,
+                        help='Printout for gsm. 1 prints ?', required=False)
+    parser.add_argument('-xTB_Hamiltonian', type=str, default='GFN2-xTB',
+                        help='xTB hamiltonian', choices=["GFN2-xTB", "GFN1-xTB"], required=False)
+    parser.add_argument('-xTB_accuracy', type=float,
+                        default=1.0, help='xTB accuracy', required=False)
+    parser.add_argument('-xTB_electronic_temperature', type=float,
+                        default=300.0, help='xTB electronic temperature', required=False)
+    parser.add_argument('-xyz_output_format', type=str, default='both',
+                        help='Format of the produced XYZ files, (default: %(default)s)', required=False, choices=['molden', 'multixyz', 'both'])
+    parser.add_argument(
+        '-solvent', type=str, help='Solvent to use (xTB calculations only)', required=False)
     parser.add_argument('-linesearch', type=str, default='NoLineSearch', help='default: %(default)s',
                         choices=['NoLineSearch', 'backtrack'])
     parser.add_argument('-coordinate_type', type=str, default='TRIC', help='Coordinate system (default %(default)s)',
@@ -83,22 +95,27 @@ def parse_arguments(verbose=True):
     parser.add_argument('-CONV_TOL', type=float, default=0.0005,
                         help='Convergence tolerance for optimizing nodes (default: %(default)s)', required=False)
     parser.add_argument('-growth_direction', type=int, default=0,
-                        help='Direction adding new nodes (default: %(default)s)', choices=[0, 1, 2])
+                        help='Direction adding new nodes [normal=0, reactant=1, product=2] (default: %(default)s)', choices=[0, 1, 2])
     parser.add_argument('-reactant_geom_fixed', action='store_true',
                         help='Fix reactant geometry i.e. do not pre-optimize')
     parser.add_argument('-product_geom_fixed', action='store_true',
                         help='Fix product geometry i.e. do not pre-optimize')
     parser.add_argument('-nproc', type=int, default=1,
                         help='Processors for calculation. Python will detect OMP_NUM_THREADS, only use this if you want to force the number of processors')
-    parser.add_argument('-charge', type=int, default=0, help='Total system charge (default: %(default)s)')
+    parser.add_argument('-charge', type=int, default=0,
+                        help='Total system charge (default: %(default)s)')
     parser.add_argument('-max_gsm_iters', type=int, default=100,
                         help='The maximum number of GSM cycles (default: %(default)s)')
     parser.add_argument('-max_opt_steps', type=int,
                         help='The maximum number of node optimizations per GSM cycle (defaults: 3 DE-GSM, 20 SE-GSM)')
-    parser.add_argument('-only_climb', action='store_true', help="Only use climbing image to optimize TS")
-    parser.add_argument('-no_climb', action='store_true', help="Don't climb to the TS")
-    parser.add_argument('-optimize_mesx', action='store_true', help='optimize to the MESX')
-    parser.add_argument('-optimize_meci', action='store_true', help='optimize to the MECI')
+    parser.add_argument('-only_climb', action='store_true',
+                        help="Only use climbing image to optimize TS")
+    parser.add_argument('-no_climb', action='store_true',
+                        help="Don't climb to the TS")
+    parser.add_argument('-optimize_mesx', action='store_true',
+                        help='optimize to the MESX')
+    parser.add_argument('-optimize_meci', action='store_true',
+                        help='optimize to the MECI')
     parser.add_argument('-restart_file', help='restart file', type=str)
     parser.add_argument('-mp_cores', type=int, default=1,
                         help="Use python multiprocessing to parallelize jobs on a single compute node. Set OMP_NUM_THREADS, ncpus accordingly.")
@@ -108,18 +125,29 @@ def parse_arguments(verbose=True):
                         help="A filename containing a list of  indices to use in hybrid coordinates. 0-Based indexed")
     parser.add_argument('-frozen_coord_idx_file', type=str, default=None,
                         help="A filename containing a list of  indices to be frozen. 0-Based indexed")
-    parser.add_argument('-conv_Ediff', default=100., type=float, help='Energy difference convergence of optimization.')
-    parser.add_argument('-conv_dE', default=1., type=float, help='State difference energy convergence')
-    parser.add_argument('-conv_gmax', default=100., type=float, help='Max grad rms threshold')
-    parser.add_argument('-DMAX', default=.1, type=float, help='')
+    parser.add_argument('-conv_Ediff', default=100., type=float,
+                        help='Energy difference convergence of optimization.')
+    parser.add_argument('-conv_dE', default=1., type=float,
+                        help='State difference energy convergence')
+    parser.add_argument('-conv_gmax', default=100., type=float,
+                        help='Max grad rms threshold (default: %(default)s)')
+    parser.add_argument('-DMAX', default=.1, type=float,
+                        help='(default: %(default)s)')
     parser.add_argument('-sigma', default=1., type=float,
                         help='The strength of the difference energy penalty in Penalty_PES')
     parser.add_argument('-prim_idx_file', type=str,
                         help="A filename containing a list of indices to define fragments. 0-Based indexed")
-    parser.add_argument('-reparametrize', action='store_true', help='Reparametrize restart string equally along path')
+    parser.add_argument('-reparametrize', action='store_true',
+                        help='Reparametrize restart string equally along path')
     parser.add_argument('-interp_method', default='DLC', type=str, help='')
-    parser.add_argument('-bonds_file', type=str, help="A file which contains the bond indices (0-based)")
-    parser.add_argument('-start_climb_immediately', action='store_true', help='Start climbing immediately when restarting.')
+    parser.add_argument('-bonds_file', type=str,
+                        help="A file which contains the bond indices (0-based)")
+    parser.add_argument('-start_climb_immediately', action='store_true',
+                        help='Start climbing immediately when restarting.')
+
+    # DFTB+
+    parser.add_argument('-DFTB_lattice_file', type=str,
+                        help='name of file containing lattice vectors in DFTB+ format', required=False)
 
     # ASE calculator's options
     group_ase = parser.add_argument_group('ASE', 'ASE calculator options')
@@ -131,7 +159,8 @@ def parse_arguments(verbose=True):
     args = parser.parse_args()
 
     if verbose:
-        print("what the fuck2")
+        # print("what the fuck2")
+        print("printlevel = verbose")
         print_msg()
 
     if args.nproc > 1:
@@ -180,7 +209,7 @@ def parse_arguments(verbose=True):
         'linesearch': args.linesearch,
         'DMAX': args.DMAX,
 
-        #output
+        # output
         'xyz_output_format': args.xyz_output_format,
 
         # molecule
@@ -221,11 +250,14 @@ def parse_arguments(verbose=True):
         'only_drive': args.only_drive,
         'reparametrize': args.reparametrize,
         'dont_analyze_ICs': args.dont_analyze_ICs,
-        'start_climb_immediately' : args.start_climb_immediately,
+        'start_climb_immediately': args.start_climb_immediately,
 
         # ASE
         'ase_class': args.ase_class,
         'ase_kwargs': args.ase_kwargs,
+
+        # DFTB+
+        'DFTB_lattice_file': args.DFTB_lattice_file,
 
     }
 
@@ -252,9 +284,11 @@ def parse_arguments(verbose=True):
 
 def create_lot(inpfileq: dict, geom):
     # decision making
-    inpfileq['states'] = [(int(m), int(s)) for m, s in zip(inpfileq["multiplicity"], inpfileq["adiabatic_index"])]
+    inpfileq['states'] = [(int(m), int(s)) for m, s in zip(
+        inpfileq["multiplicity"], inpfileq["adiabatic_index"])]
     do_coupling = inpfileq['PES_type'] == "Avg_PES"
-    coupling_states = inpfileq['states'] if inpfileq['PES_type'] == "Avg_PES" else []
+    coupling_states = inpfileq['states'] if inpfileq['PES_type'] == "Avg_PES" else [
+    ]
 
     # common options for LoTs
     lot_options = dict(
@@ -290,8 +324,16 @@ def create_lot(inpfileq: dict, geom):
             solvent=inpfileq['solvent'],
             **lot_options,
         )
+
+    if lot_name == "DFTB":
+        return DFTB.from_options(
+            DFTB_lattice_file=inpfileq['DFTB_lattice_file'],
+            **lot_options
+        )
+
     else:
-        est_package = importlib.import_module("pygsm.level_of_theories." + lot_name.lower())
+        est_package = importlib.import_module(
+            "pygsm.level_of_theories." + lot_name.lower())
         lot_class = getattr(est_package, lot_name)
         return lot_class.from_options(**lot_options)
 
@@ -322,7 +364,8 @@ def choose_pes(lot, inpfileq: dict):
         if inpfileq['PES_type'] == "Avg_PES":
             pes = Avg_PES(PES1=pes1, PES2=pes2, lot=lot)
         elif inpfileq['PES_type'] == "Penalty_PES":
-            pes = Penalty_PES(PES1=pes1, PES2=pes2, lot=lot, sigma=inpfileq['sigma'])
+            pes = Penalty_PES(PES1=pes1, PES2=pes2, lot=lot,
+                              sigma=inpfileq['sigma'])
         else:
             raise NotImplementedError
 
@@ -344,7 +387,8 @@ def choose_optimizer(inpfileq: dict):
     elif inpfileq['optimizer'] == "beales_cg":
         opt_class = beales_cg
     else:
-        raise NotImplementedError(f"Optimizer `{inpfileq['optimizer']}` not implemented")
+        raise NotImplementedError(
+            f"Optimizer `{inpfileq['optimizer']}` not implemented")
 
     optimizer = opt_class.from_options(
         print_level=inpfileq['opt_print_level'],
@@ -362,7 +406,10 @@ def choose_optimizer(inpfileq: dict):
 
 def main():
 
-    print("WHAT THE FUCK!")
+    # print("WHAT THE FUCK!")
+    #
+    log_cl_input()
+
     # argument parsing and header
     inpfileq = parse_arguments(verbose=True)
 
@@ -373,7 +420,8 @@ def main():
         geoms = manage_xyz.read_xyzs(inpfileq['xyzfile'])
 
     # LOT
-    nifty.printcool("Build the {} level of theory (LOT) object".format(inpfileq['EST_Package']))
+    nifty.printcool("Build the {} level of theory (LOT) object".format(
+        inpfileq['EST_Package']))
     lot = create_lot(inpfileq, geoms[0])
 
     # PES
@@ -420,7 +468,8 @@ def main():
     pes = choose_pes(lot, inpfileq)
 
     # Molecule
-    nifty.printcool("Building the reactant object with {}".format(inpfileq['coordinate_type']))
+    nifty.printcool("Building the reactant object with {}".format(
+        inpfileq['coordinate_type']))
     Form_Hessian = True if inpfileq['optimizer'] == 'eigenvector_follow' else False
 
     # hybrid coordinates
@@ -447,7 +496,8 @@ def main():
         assert inpfileq['coordinate_type'] == "TRIC", "won't work (currently) with other coordinate systems"
         prim_indices = np.loadtxt(inpfileq['prim_idx_file'])
         if prim_indices.ndim == 2:
-            prim_indices = [(int(prim_indices[i, 0]), int(prim_indices[i, 1]) - 1) for i in range(len(prim_indices))]
+            prim_indices = [(int(prim_indices[i, 0]), int(
+                prim_indices[i, 1]) - 1) for i in range(len(prim_indices))]
         elif prim_indices.ndim == 1:
             prim_indices = [(int(prim_indices[0]), int(prim_indices[1]) - 1)]
 
@@ -631,7 +681,8 @@ def main():
         elif inpfileq['gsm_type'] == "SE_Cross":
             gsm_class = SE_Cross
         else:
-            raise NotImplementedError(f"GSM type: `{inpfileq['gsm_type']}` not understood")
+            raise NotImplementedError(
+                f"GSM type: `{inpfileq['gsm_type']}` not understood")
 
         gsm = gsm_class.from_options(
             reactant=reactant,
@@ -670,7 +721,8 @@ def main():
         optimizer.opt_cross = True
 
     if not inpfileq['reactant_geom_fixed'] and inpfileq['gsm_type'] != 'SE_Cross':
-        path = os.path.join(os.getcwd(), 'scratch/{:03}/{}/'.format(inpfileq["ID"], 0))
+        path = os.path.join(
+            os.getcwd(), 'scratch/{:03}/{}/'.format(inpfileq["ID"], 0))
         nifty.printcool("REACTANT GEOMETRY NOT FIXED!!! OPTIMIZING")
         optimizer.optimize(
             molecule=reactant,
@@ -680,7 +732,8 @@ def main():
         )
 
     if not inpfileq['product_geom_fixed'] and inpfileq['gsm_type'] == 'DE_GSM':
-        path = os.path.join(os.getcwd(), 'scratch/{:03}/{}/'.format(inpfileq["ID"], inpfileq["num_nodes"] - 1))
+        path = os.path.join(
+            os.getcwd(), 'scratch/{:03}/{}/'.format(inpfileq["ID"], inpfileq["num_nodes"] - 1))
         nifty.printcool("PRODUCT GEOMETRY NOT FIXED!!! OPTIMIZING")
         optimizer.optimize(
             molecule=product,
@@ -708,7 +761,8 @@ def main():
             inpfileq['max_opt_steps'] = 20
 
     if inpfileq["restart_file"] is not None:
-        gsm.setup_from_geometries(geoms, reparametrize=inpfileq["reparametrize"], start_climb_immediately=inpfileq["start_climb_immediately"])
+        gsm.setup_from_geometries(
+            geoms, reparametrize=inpfileq["reparametrize"], start_climb_immediately=inpfileq["start_climb_immediately"])
     gsm.go_gsm(inpfileq['max_gsm_iters'], inpfileq['max_opt_steps'], rtype)
     if inpfileq['gsm_type'] == 'SE_Cross':
         post_processing(
@@ -716,17 +770,20 @@ def main():
             analyze_ICs=inpfileq["dont_analyze_ICs"],
             have_TS=False,
         )
-        manage_xyz.write_xyz(f'meci_{gsm.ID}.xyz', gsm.nodes[gsm.nR].geometry)
+        manage_xyz.write_xyz(
+            f'meci_{gsm.ID}.xyz', gsm.nodes[gsm.nR].geometry, comment=gsm.energies[gsm.nR])
 
         if not gsm.end_early:
-            manage_xyz.write_xyz(f'TSnode_{gsm.ID}.xyz', gsm.nodes[gsm.TSnode].geometry)
+            manage_xyz.write_xyz(
+                f'TSnode_{gsm.ID}.xyz', gsm.nodes[gsm.TSnode].geometry, comment=gsm.energies[gsm.TSnode])
     else:
         post_processing(
             gsm,
             analyze_ICs=inpfileq["dont_analyze_ICs"],
             have_TS=True,
         )
-        manage_xyz.write_xyz(f'TSnode_{gsm.ID}.xyz', gsm.nodes[gsm.TSnode].geometry)
+        manage_xyz.write_xyz(
+            f'TSnode_{gsm.ID}.xyz', gsm.nodes[gsm.TSnode].geometry, comment=gsm.energies[gsm.TSnode])
 
     cleanup_scratch(gsm.ID)
 
@@ -828,7 +885,8 @@ def cleanup_scratch(ID):
 def plot(fx, x, title):
     plt.figure(1)
     plt.title("String {:04d}".format(title))
-    plt.plot(x, fx, color='b', label='Energy', linewidth=2, marker='o', markersize=12)
+    plt.plot(x, fx, color='b', label='Energy',
+             linewidth=2, marker='o', markersize=12)
     plt.xlabel('Node Number')
     plt.ylabel('Energy (kcal/mol)')
     plt.legend(loc='best')
@@ -862,14 +920,16 @@ def post_processing(gsm, analyze_ICs=False, have_TS=True):
         print(" TS energy: %5.4f" % TSenergy)
         print(" absolute energy TS node %5.4f" % gsm.nodes[gsm.TSnode].energy)
         minnodeP = gsm.TSnode + np.argmin(gsm.energies[gsm.TSnode:])
-        print(" min reactant node: %i min product node %i TS node is %i" % (minnodeR, minnodeP, gsm.TSnode))
+        print(" min reactant node: %i min product node %i TS node is %i" %
+              (minnodeR, minnodeP, gsm.TSnode))
 
         # ICs
         ICs.append(gsm.nodes[minnodeR].primitive_internal_values)
         ICs.append(gsm.nodes[gsm.TSnode].primitive_internal_values)
         ICs.append(gsm.nodes[minnodeP].primitive_internal_values)
         with open('IC_data_{:04d}.txt'.format(gsm.ID), 'w') as f:
-            f.write("Internals \t minnodeR: {} \t TSnode: {} \t minnodeP: {}\n".format(minnodeR, gsm.TSnode, minnodeP))
+            f.write("Internals \t minnodeR: {} \t TSnode: {} \t minnodeP: {}\n".format(
+                minnodeR, gsm.TSnode, minnodeP))
             for x in zip(*ICs):
                 f.write("{0}\t{1}\t{2}\t{3}\n".format(*x))
 
@@ -877,12 +937,14 @@ def post_processing(gsm, analyze_ICs=False, have_TS=True):
         minnodeR = 0
         minnodeP = gsm.nR
         print(" absolute energy end node %5.4f" % gsm.nodes[gsm.nR].energy)
-        print(" difference energy end node %5.4f" % gsm.nodes[gsm.nR].difference_energy)
+        print(" difference energy end node %5.4f" %
+              gsm.nodes[gsm.nR].difference_energy)
         # ICs
         ICs.append(gsm.nodes[minnodeR].primitive_internal_values)
         ICs.append(gsm.nodes[minnodeP].primitive_internal_values)
         with open('IC_data_{}.txt'.format(gsm.ID), 'w') as f:
-            f.write("Internals \t Beginning: {} \t End: {}".format(minnodeR, gsm.TSnode, minnodeP))
+            f.write("Internals \t Beginning: {} \t End: {}".format(
+                minnodeR, gsm.TSnode, minnodeP))
             for x in zip(*ICs):
                 f.write("{0}\t{1}\t{2}\n".format(*x))
 
@@ -923,6 +985,14 @@ def print_msg():
 
     """
     print(msg)
+
+
+def log_cl_input():
+    print("-----------------------------------------------")
+    print("COMMAND USED TO START THE GSM CALCULATION:")
+    print(' '.join(sys.argv))
+    print("-----------------------------------------------")
+    print("")
 
 
 if __name__ == '__main__':

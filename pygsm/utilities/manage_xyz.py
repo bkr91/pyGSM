@@ -63,6 +63,7 @@ def read_xyzs(
         ea = sa+natoms
         geom = []
         for line in lines[sa:ea]:
+            print(line)
             mobj = re.match(r'^\s*(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s*$', line)
             geom.append((
                 mobj.group(1),
@@ -264,6 +265,18 @@ def write_std_multixyz(
                 ))
 
 
+def write_std_multixyz_and_molden(
+        filename,
+        geoms,
+        energies,
+        gradrms,
+        dEs,
+):
+    write_std_multixyz(filename, geoms, energies, gradrms, dEs)
+    assert(filename[-4:] == ".xyz")
+    write_molden_geoms(filename[:-3] + 'molden', geoms, energies, gradrms, dEs)
+
+
 def write_amber_xyz(
         filename,
         geom,
@@ -422,4 +435,5 @@ def write_fms90(
 XYZ_WRITERS = {
     'molden': write_molden_geoms,
     'multixyz': write_std_multixyz,
+    'both': write_std_multixyz_and_molden,
 }

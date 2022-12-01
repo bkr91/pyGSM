@@ -376,6 +376,9 @@ class block_matrix(object):
 
     @staticmethod
     def dot(left, right):
+        # print("in dot(left, right)")
+        # print(left)
+        # print(right)
         def block_vec_dot(block, vec):
             if vec.ndim == 2 and vec.shape[1] == 1:
                 vec = vec.flatten()
