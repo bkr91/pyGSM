@@ -12,7 +12,7 @@ with open(path.join(here, 'README.md'), encoding='utf-8') as f:
 
 setup(
     name='pyGSM',  # Required
-    version='0.1',  # Required
+    version='0.2',  # Required
     description='Reaction path searching',  # Optional
     url='https://github.com/ZimmermanGroup/pyGSM',
     author='Cody Aldaz',
