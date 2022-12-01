@@ -406,6 +406,8 @@ def choose_optimizer(inpfileq: dict):
 
 def main():
 
+    print("Again, just a test")
+
     # print("WHAT THE FUCK!")
     #
     log_cl_input()
